@@ -40,3 +40,4 @@ outputs/
 *.pdf
 report_*.pdf
 errors.txt
+math_outcomes_summary.txt
