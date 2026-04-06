@@ -117,7 +117,8 @@ def clahe_enhancement(
     t0 = time.time()
     clip_limit = float(1.0 + (k - 0.5) * 2.0)   # [1.0, 6.0]
     # Larger window → fewer, larger tiles (coarser local adaptation)
-    tile = max(4, min(16, round(512 / (window_size * 8))))
+    max_dim = max(image.shape[0], image.shape[1])
+    tile = max(4, min(16, round(max_dim / (window_size * 8))))
     grid = (tile, tile)
 
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=grid)
@@ -168,8 +169,7 @@ def min_max_stretching(
         return np.clip(out, 0, 255).astype(np.uint8)
 
     if _is_color(image):
-        channels = cv2.split(image)
-        enhanced = cv2.merge([_partial_stretch(c) for c in channels])
+        enhanced = _apply_on_luminance(image, _partial_stretch)
     else:
         enhanced = _partial_stretch(image)
 

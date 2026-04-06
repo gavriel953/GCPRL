@@ -33,6 +33,10 @@ ENV/
 .DS_Store
 
 # Project specific
-{static/
+static/uploads/
+outputs/
 *.log
 .env
+*.pdf
+report_*.pdf
+errors.txt

@@ -33,11 +33,12 @@ def contrast_to_noise_ratio(image: np.ndarray) -> float:
     Returns:
         CNR value (higher = better contrast).
     """
-    gray = ensure_gray(image).astype(np.float32)
-    threshold = np.median(gray)
+    gray = ensure_gray(image).astype(np.uint8)
+    threshold, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    gray_f = gray.astype(np.float32)
 
-    signal_region = gray[gray > threshold]
-    background_region = gray[gray <= threshold]
+    signal_region = gray_f[gray_f > threshold]
+    background_region = gray_f[gray_f <= threshold]
 
     if len(signal_region) == 0 or len(background_region) == 0:
         return 0.0
@@ -98,8 +99,16 @@ def edge_preservation_index(
 
     orig_flat = orig_edges.flatten()
     enh_flat = enh_edges.flatten()
+    
+    # Check for totally flat images to avoid NaN
+    if np.std(orig_flat) == 0 or np.std(enh_flat) == 0:
+        if np.std(orig_flat) == 0 and np.std(enh_flat) == 0:
+            return 1.0
+        return 0.0
 
     corr = np.corrcoef(orig_flat, enh_flat)[0, 1]
+    if np.isnan(corr):
+        corr = 0.0
     epi = max(0.0, min(1.0, float(corr)))
     return round(epi, 4)
 
