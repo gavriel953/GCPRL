@@ -32,6 +32,11 @@ def load_dicom(filepath: str) -> Tuple[np.ndarray, dict]:
     # Handle multi-frame DICOM (take middle frame)
     if pixel_array.ndim == 3:
         pixel_array = pixel_array[pixel_array.shape[0] // 2]
+        
+    # Apply Rescale Slope & Intercept
+    slope = getattr(ds, 'RescaleSlope', 1.0)
+    intercept = getattr(ds, 'RescaleIntercept', 0.0)
+    pixel_array = pixel_array * float(slope) + float(intercept)
 
     # Apply windowing if available
     wc = getattr(ds, 'WindowCenter', None)

@@ -65,6 +65,38 @@ def encode_image(image: np.ndarray) -> str:
     return image_to_base64(display)
 
 
+def cleanup_expired_files():
+    """Remove files older than FILE_TTL to prevent storage leaks."""
+    import time
+    now = time.time()
+    ttl = app.config.get('FILE_TTL', 3600)
+    upload_dir = app.config['UPLOAD_FOLDER']
+    
+    if not os.path.exists(upload_dir):
+        return
+        
+    for filename in os.listdir(upload_dir):
+        filepath = os.path.join(upload_dir, filename)
+        if os.path.isfile(filepath):
+            if os.stat(filepath).st_mtime < now - ttl:
+                try:
+                    os.remove(filepath)
+                except Exception as e:
+                    logger.warning(f"Could not delete {filepath}: {e}")
+                    
+    # Also clean up memory job_store
+    expired_jobs = []
+    for jid, job in job_store.items():
+        try:
+            created_s = datetime.fromisoformat(job['created']).timestamp()
+            if created_s < now - ttl:
+                expired_jobs.append(jid)
+        except Exception:
+            pass
+    for jid in expired_jobs:
+        del job_store[jid]
+
+
 # ──────────────────────────── Routes ────────────────────────────────────────
 
 @app.route('/')
@@ -96,6 +128,9 @@ def upload():
     unique_name = f"{uuid.uuid4().hex}_{filename}"
     filepath = get_upload_path(unique_name)
     file.save(filepath)
+    
+    # Run cleanup periodically on uploads
+    cleanup_expired_files()
 
     try:
         image, meta = load_image(filepath)
@@ -150,6 +185,7 @@ def enhance():
     preserve = bool(data.get('preserve_diagnostic', True))
     local_alpha = float(data.get('local_alpha', 0.30))
     stretch = float(data.get('stretch', 0.95))
+    brightness = float(data.get('brightness', 0.0))
 
     # Clamp parameters
     k = max(app.config['MIN_K'], min(app.config['MAX_K'], k))
@@ -158,6 +194,7 @@ def enhance():
         window_size += 1
     local_alpha = max(0.0, min(0.5, local_alpha))
     stretch = max(0.8, min(0.99, stretch))
+    brightness = max(-50.0, min(50.0, brightness))
 
     job = job_store[job_id]
     try:
@@ -167,9 +204,9 @@ def enhance():
 
     try:
         if len(original.shape) == 3:
-            enhanced, gcprl_meta = gcprl_enhance_color(original, k, window_size, preserve, local_alpha, stretch)
+            enhanced, gcprl_meta = gcprl_enhance_color(original, k, window_size, preserve, local_alpha, stretch, brightness)
         else:
-            enhanced, gcprl_meta = gcprl_enhance(original, k, window_size, preserve, local_alpha, stretch)
+            enhanced, gcprl_meta = gcprl_enhance(original, k, window_size, preserve, local_alpha, stretch, brightness)
     except Exception as e:
         logger.exception("GCPRL enhancement failed")
         return jsonify({'error': f'Enhancement failed: {str(e)}'}), 500

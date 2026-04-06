@@ -89,11 +89,16 @@ def generate_pdf_report(
 
     # Images
     for label, path in [('Original Image', original_path), ('Enhanced Image', enhanced_path)]:
+        story.append(Paragraph(label, styles['Heading3']))
         if os.path.exists(path):
-            story.append(Paragraph(label, styles['Heading3']))
-            img = RLImage(path, width=4 * inch, height=3 * inch, kind='proportional')
-            story.append(img)
-            story.append(Spacer(1, 0.2 * inch))
+            try:
+                img = RLImage(path, width=4 * inch, height=3 * inch, kind='proportional')
+                story.append(img)
+            except Exception as e:
+                story.append(Paragraph(f"[Image file corrupted or unsupported: {e}]", styles['Normal']))
+        else:
+            story.append(Paragraph("[Image file no longer available on server]", styles['Normal']))
+        story.append(Spacer(1, 0.2 * inch))
 
     doc.build(story)
     logger.info(f"PDF report generated: {pdf_path}")

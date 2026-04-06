@@ -46,7 +46,13 @@ def load_image(filepath: str) -> Tuple[np.ndarray, dict]:
 
     # Handle 16-bit images
     if img.dtype == np.uint16:
-        img = (img / 256).astype(np.uint8)
+        # Min-max normalization preserves structure better than just dropping 8 bits
+        img_min = img.min()
+        img_max = img.max()
+        if img_max > img_min:
+            img = ((img.astype(np.float32) - img_min) / (img_max - img_min) * 255.0).astype(np.uint8)
+        else:
+            img = np.zeros_like(img, dtype=np.uint8)
 
     # Handle RGBA
     if len(img.shape) == 3 and img.shape[2] == 4:
