@@ -14,7 +14,7 @@ pip install -r requirements.txt
 python app.py
 
 # 3. Open browser
-open http://localhost:5000
+open http://localhost:5005
 ```
 
 ---
