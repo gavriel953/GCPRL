@@ -104,6 +104,7 @@ window.enhanceImage = async () => {
   const preserve = $('#preserveCheck').checked;
   const localAlpha = parseFloat($('#alphaSlider')?.value || 0.45);
   const stretch = parseFloat($('#stretchSlider')?.value || 0.95);
+  const brightness = parseFloat($('#brightnessSlider')?.value || 0);
 
   showProgress('Running GCPRL enhancement…');
 
@@ -111,8 +112,11 @@ window.enhanceImage = async () => {
     const res = await fetch('/enhance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: App.jobId, k, window_size: winSize,
-        preserve_diagnostic: preserve, local_alpha: localAlpha, stretch }),
+      body: JSON.stringify({ 
+        job_id: App.jobId, k, window_size: winSize,
+        preserve_diagnostic: preserve, local_alpha: localAlpha, 
+        stretch, brightness 
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Enhancement failed');
@@ -630,6 +634,7 @@ function applyOptimizedParams(params) {
   set('windowSlider', 'windowValue',  params.window_size, v => v);
   set('alphaSlider',  'alphaValue',   params.local_alpha,  v => parseFloat(v).toFixed(2));
   set('stretchSlider','stretchValue', params.stretch,      v => parseFloat(v).toFixed(2));
+  set('brightnessSlider','brightnessValue', params.brightness || 0, v => v);
   const cb = $('#preserveCheck');
   if (cb) cb.checked = params.preserve_diagnostic !== false;
 }
@@ -637,6 +642,23 @@ function applyOptimizedParams(params) {
 function showRationale(params, rationale, stats) {
   const panel = $('#rationalePanel');
   if (!panel) return;
+
+  const grid = $('#rationaleGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  // Add the Regression Model info first if available (CO 5)
+  if (rationale.Model) {
+    const modelDiv = document.createElement('div');
+    modelDiv.style.gridColumn = "1 / -1";
+    modelDiv.style.background = "rgba(0,184,212,0.1)";
+    modelDiv.style.padding = "10px";
+    modelDiv.style.borderRadius = "4px";
+    modelDiv.style.marginBottom = "10px";
+    modelDiv.style.fontSize = "0.85rem";
+    modelDiv.innerHTML = `<strong>Σ Mathematical Logic (CO 5):</strong> ${rationale.Model}`;
+    grid.appendChild(modelDiv);
+  }
 
   // Stats pills
   const statsEl = $('#rationaleStats');
@@ -655,29 +677,33 @@ function showRationale(params, rationale, stats) {
   }
 
   // Rationale cards
-  const grid = $('#rationaleGrid');
-  if (grid) {
-    const paramLabels = {
-      k: 'Enhancement Strength (k)',
-      window_size: 'Variance Window',
-      local_alpha: 'Local Contrast (α)',
-      stretch: 'CDF Stretch',
-    };
-    const paramValues = {
-      k: params.k,
-      window_size: params.window_size,
-      local_alpha: params.local_alpha,
-      stretch: params.stretch,
-    };
-    grid.innerHTML = Object.entries(paramLabels).map(([key, label]) => `
-      <div class="rationale-card">
-        <div class="rationale-param">
-          ${label}
-          <span class="rationale-value">${paramValues[key]}</span>
-        </div>
-        <div class="rationale-reason">${rationale[key] || '—'}</div>
+  const paramLabels = {
+    k: 'Enhancement Strength (k)',
+    window_size: 'Variance Window',
+    local_alpha: 'Local Contrast (α)',
+    stretch: 'CDF Stretch',
+  };
+  const paramValues = {
+    k: parseFloat(params.k).toFixed(2),
+    window_size: params.window_size,
+    local_alpha: parseFloat(params.local_alpha).toFixed(2),
+    stretch: parseFloat(params.stretch).toFixed(2),
+  };
+
+  const cardsHtml = Object.entries(paramLabels).map(([key, label]) => `
+    <div class="rationale-card">
+      <div class="rationale-param">
+        ${label}
+        <span class="rationale-value">${paramValues[key]}</span>
       </div>
-    `).join('');
+      <div class="rationale-reason">${rationale[key] || '—'}</div>
+    </div>
+  `).join('');
+
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = cardsHtml;
+  while (tempDiv.firstChild) {
+    grid.appendChild(tempDiv.firstChild);
   }
 
   panel.classList.remove('hidden');

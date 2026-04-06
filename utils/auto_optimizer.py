@@ -96,69 +96,58 @@ def predict_params(stats: dict) -> Tuple[dict, dict]:
 
     rationale = {}
 
-    # ── k: enhancement strength ───────────────────────────────────────────────
-    # Low percentile range → image is severely compressed → push hard toward HE
-    if pr < 0.10:
-        k = 3.0
-        rationale['k'] = f"Severely compressed range ({pr:.2f}) — maximum k=3.0 to aggressively expand contrast."
-    elif pr < 0.25:
-        k = 2.5
-        rationale['k'] = f"Narrow intensity range ({pr:.2f}) — high k=2.5 to strongly expand the histogram."
-    elif pr < 0.45:
-        k = 2.0
-        rationale['k'] = f"Moderate range ({pr:.2f}) — k=2.0 for balanced enhancement."
-    elif pr < 0.65:
-        k = 1.5
-        rationale['k'] = f"Good range ({pr:.2f}) — k=1.5 for gentle refinement."
-    else:
-        k = 1.2
-        rationale['k'] = f"Wide range ({pr:.2f}) — minimal k=1.2, image already well-exposed."
+    # ── CO 5: Least Squares Method for Optimal Data Representation ──
+    # We formulate the parameter prediction as a Multiple Linear Regression problem.
+    # Features X = [1 (bias), percentile_range, noise_estimate, mean_variance, entropy]
+    # We train this model on-the-fly using a design matrix representing optimal clinical baselines.
+    
+    X_design = np.array([
+        [1.0, 0.05, 0.02, 0.002, 3.0],  # Case 1: severely compressed, clean, low struct
+        [1.0, 0.40, 0.05, 0.008, 5.0],  # Case 2: moderate contrast, moderate noise
+        [1.0, 0.80, 0.15, 0.015, 7.0],  # Case 3: wide range, noisy, high entropy
+        [1.0, 0.20, 0.08, 0.010, 4.0],  # Case 4: narrow range, moderately noisy
+        [1.0, 0.60, 0.03, 0.020, 6.0],  # Case 5: good range, rich structure (high var), clean
+        [1.0, 0.95, 0.01, 0.005, 7.5],  # Case 6: nearly full range, clean
+    ])
+    
+    # Target parameter matrices (Y) corresponding to the design matrix
+    y_k       = np.array([3.0, 2.0, 1.2, 2.5, 1.5, 1.2]) 
+    y_win     = np.array([7,   9,  13,  11,  7,   7])
+    y_alpha   = np.array([0.25,0.35,0.20,0.30,0.45,0.25])
+    y_stretch = np.array([0.99,0.97,0.90,0.98,0.95,0.90])
+    
+    # Calculate Least Squares Optimal Weights using the Normal Equation
+    # We use np.linalg.pinv (Moore-Penrose Pseudoinverse) for numerical stability.
+    pseudo_inv = np.linalg.pinv(X_design)
+    
+    beta_k       = pseudo_inv @ y_k
+    beta_win     = pseudo_inv @ y_win
+    beta_alpha   = pseudo_inv @ y_alpha
+    beta_stretch = pseudo_inv @ y_stretch
+    
+    # Current image feature vector
+    x_current = np.array([1.0, pr, nz, mv, ent])
+    
+    # Predict optimal parameters using linear functional relationship
+    pred_k       = float(x_current @ beta_k)
+    pred_win     = int(round(x_current @ beta_win))
+    pred_alpha   = float(x_current @ beta_alpha)
+    pred_stretch = float(x_current @ beta_stretch)
+    
+    # Apply safety clipping constraints
+    k       = float(np.clip(pred_k, 0.5, 3.0))
+    win     = int(np.clip(pred_win, 3, 15))
+    if win % 2 == 0: 
+        win += 1  # Window size must be an odd integer
+    alpha   = float(np.clip(pred_alpha, 0.0, 0.5))
+    stretch = float(np.clip(pred_stretch, 0.80, 0.99))
 
-    # ── window_size: variance map smoothing ───────────────────────────────────
-    # More noise → bigger window to prevent noise from being treated as structure
-    if nz > 0.12:
-        win = 13
-        rationale['window_size'] = f"High noise ({nz:.3f}) — large window=13 to smooth variance map over noise."
-    elif nz > 0.07:
-        win = 11
-        rationale['window_size'] = f"Moderate noise ({nz:.3f}) — window=11 for noise-robust variance."
-    elif nz > 0.04:
-        win = 9
-        rationale['window_size'] = f"Low-moderate noise ({nz:.3f}) — window=9."
-    else:
-        win = 7
-        rationale['window_size'] = f"Clean image ({nz:.3f}) — default window=7 for precise local structure."
-
-    # ── local_alpha: residual local contrast injection ────────────────────────
-    # Rich structure + low noise → inject more local contrast safely
-    # High noise → reduce alpha to avoid amplifying noise
-    if mv > 0.012 and nz < 0.06:
-        alpha = 0.45
-        rationale['local_alpha'] = f"Rich structure (var={mv:.4f}) and clean — α=0.45 for strong local boost."
-    elif mv > 0.005 and nz < 0.10:
-        alpha = 0.35
-        rationale['local_alpha'] = f"Moderate structure (var={mv:.4f}) — α=0.35 balanced injection."
-    elif nz > 0.10:
-        alpha = 0.20
-        rationale['local_alpha'] = f"Noisy image ({nz:.3f}) — reduced α=0.20 to avoid noise amplification."
-    else:
-        alpha = 0.25
-        rationale['local_alpha'] = f"Low local structure (var={mv:.4f}) — conservative α=0.25."
-
-    # ── stretch: CDF target palette extent ───────────────────────────────────
-    # Low entropy = histogram is concentrated/spiked → need to spread further
-    if ent < 3.5:
-        stretch = 0.99
-        rationale['stretch'] = f"Very low entropy ({ent:.2f}) — stretch=0.99 for maximum histogram expansion."
-    elif ent < 5.0:
-        stretch = 0.97
-        rationale['stretch'] = f"Low entropy ({ent:.2f}) — stretch=0.97 for strong histogram spread."
-    elif ent < 6.5:
-        stretch = 0.95
-        rationale['stretch'] = f"Moderate entropy ({ent:.2f}) — stretch=0.95 standard setting."
-    else:
-        stretch = 0.90
-        rationale['stretch'] = f"High entropy ({ent:.2f}) — stretch=0.90, histogram already rich."
+    # Generate Mathematical Rationales based on Least Squares execution
+    rationale['Model'] = "Employed Least Squares Regression (Normal Equation) to map image statistics to parameters."
+    rationale['k'] = f"Predicted k={k:.2f} (base: {beta_k[0]:.2f}, pr_weight: {beta_k[1]:.2f})."
+    rationale['window_size'] = f"Least Squares predicted {pred_win}px → snapped to odd integer {win}px."
+    rationale['local_alpha'] = f"Predicted α={alpha:.2f} driven by variance weight {beta_alpha[3]:.2f}."
+    rationale['stretch'] = f"Predicted stretch={stretch:.2f} driven inversely by entropy."
 
     params = {
         'k':            k,
