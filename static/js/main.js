@@ -510,6 +510,15 @@ function initSliders() {
       sVal.textContent = parseFloat(sSlider.value).toFixed(2);
     });
   }
+
+  const bSlider = $('#brightnessSlider');
+  const bVal = $('#brightnessValue');
+  if (bSlider && bVal) {
+    bVal.textContent = bSlider.value;
+    bSlider.addEventListener('input', () => {
+      bVal.textContent = bSlider.value;
+    });
+  }
 }
 
 // ─────────────────────── Buttons ───────────────────────

@@ -33,11 +33,19 @@ ENV/
 .DS_Store
 
 # Project specific
-static/uploads/
+static/uploads/*
+!static/uploads/.gitkeep
 outputs/
 *.log
 .env
 *.pdf
 report_*.pdf
 errors.txt
+
+# Artifacts and Junk
+all_programs*.md
+{static/
+.gemini/
+.DS_Store
+*.swp
 math_outcomes_summary.txt
