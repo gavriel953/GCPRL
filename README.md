@@ -1,3 +1,14 @@
+---
+title: GCPRL Medical Image Enhancement
+emoji: 🏥
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
 # GCPRL Medical Image Enhancement
 
 **Globally Coupled Pixel Ranking Linearization (GCPRL)** — A Flask web application for contrast enhancement of medical images (X-rays, MRIs, CT scans), with side-by-side comparison, multi-method benchmarking, and difference visualization.
