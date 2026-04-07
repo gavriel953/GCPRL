@@ -453,6 +453,13 @@ def generate_report(job_id):
 # ──────────────────────────── Run ───────────────────────────────────────────
 
 if __name__ == '__main__':
-    logger.info("Starting GCPRL Medical Image Enhancement Server...")
+    # Default to 7860 for Hugging Face, or 5005 for local dev
+    port = int(os.environ.get('PORT', 7860))
+    debug_mode = os.environ.get('FLASK_ENV', 'development') == 'development'
+
+    logger.info(f"Starting GCPRL Medical Image Enhancement Server on port {port}...")
     logger.info(f"Upload folder: {app.config['UPLOAD_FOLDER']}")
-    app.run(debug=True, host='0.0.0.0', port=5005, threaded=True)
+    
+    # In production (Gunicorn), this block is skipped.
+    # When running directly (python app.py), this will start the dev server level.
+    app.run(debug=debug_mode, host='0.0.0.0', port=port, threaded=True)
